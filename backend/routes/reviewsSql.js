@@ -1,0 +1,6 @@
+const express = require('express');
+const { pool } = require('../db');
+const { protect, authorize } = require('../Middleware/auth');
+const router = express.Router();
+router.post('/', protect, authorize('customer'), async (req, res) => { const { bookingId, rating, review = '' } = req.body; if (!Number.isInteger(Number(rating)) || rating < 1 || rating > 5) return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5' }); try { const [rows] = await pool.query('SELECT * FROM bookings WHERE id=? AND customer_id=? AND status="COMPLETED"', [bookingId, req.user.id]); if (!rows[0]) return res.status(404).json({ success: false, message: 'Completed booking not found' }); await pool.query('INSERT INTO reviews (booking_id,customer_id,worker_id,rating,review) VALUES (?,?,?,?,?)', [bookingId, req.user.id, rows[0].worker_id, rating, review.trim()]); await pool.query('UPDATE worker_profiles SET rating=(SELECT AVG(rating) FROM reviews WHERE worker_id=?) WHERE user_id=?', [rows[0].worker_id, rows[0].worker_id]); res.status(201).json({ success: true, message: 'Review submitted' }); } catch (error) { res.status(error.code === 'ER_DUP_ENTRY' ? 409 : 400).json({ success: false, message: error.code === 'ER_DUP_ENTRY' ? 'This booking already has a review' : 'Unable to submit review' }); } });
+module.exports = router;

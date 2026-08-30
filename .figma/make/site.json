@@ -1,0 +1,10 @@
+{
+  "description": "Connects households and communities with gig service providers, enabling efficient access to essential services while fostering local collaboration.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

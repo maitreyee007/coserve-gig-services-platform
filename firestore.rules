@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'admin@coserve.in'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isCooperativeManager() {
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'cooperative';
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || isCooperativeManager());
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && (request.resource.data.role in ['customer', 'worker', 'cooperative']
+          || (request.auth.token.email == 'admin@coserve.in' && request.resource.data.role == 'admin'));
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role;
+      allow delete: if isAdmin();
+    }
+
+    match /workers/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin() || isCooperativeManager()
+        || (resource.data.verificationStatus == 'verified' && resource.data.accountStatus == 'active');
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && get(/databases/$(database)/documents/users/$(uid)).data.role == 'worker'
+        && request.resource.data.verificationStatus == 'pending';
+      allow update: if isAdmin() || isCooperativeManager() || (signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.verificationStatus == resource.data.verificationStatus
+        && request.resource.data.accountStatus == resource.data.accountStatus);
+      allow delete: if isAdmin();
+    }
+
+    match /workerPrivate/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || isCooperativeManager());
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if (signedIn() && request.auth.uid == uid) || isAdmin() || isCooperativeManager();
+      allow delete: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin() || isCooperativeManager();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.workerId == request.auth.uid || isAdmin());
+      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.workerId is string
+        && get(/databases/$(database)/documents/workers/$(request.resource.data.workerId)).data.verificationStatus == 'verified';
+      allow update: if isAdmin() || (signedIn() && resource.data.workerId == request.auth.uid);
+      allow delete: if isAdmin() || (signedIn() && resource.data.customerId == request.auth.uid);
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update, delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}
